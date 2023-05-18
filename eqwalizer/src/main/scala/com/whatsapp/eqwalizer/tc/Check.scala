@@ -241,6 +241,10 @@ final class Check(pipelineContext: PipelineContext) {
           checkLambda(lambda, resTy, env)
         case Block(block) =>
           checkBody(block, resTy, env)
+        case Maybe(_) =>
+          ???
+        case MaybeElse(_, _) =>
+          ???
         case c: Case if Predicates.isCaseIf(c) =>
           val ifExpr = Predicates.asIf(c)
           checkExpr(ifExpr, resTy, env)
@@ -274,6 +278,9 @@ final class Check(pipelineContext: PipelineContext) {
           val (t2, env2) = elabPat.elabPat(mPat, mType, env1)
           if (subtype.subType(t2, resTy)) env2
           else throw ExpectedSubtype(expr.pos, expr, expected = resTy, got = t2)
+        case MaybeMatch(_, _) =>
+          // MaybeMatch can happen only inside Maybe and needs special treatment
+          throw new IllegalStateException(s"unexpected $expr")
         case _: UnOp | _: BinOp =>
           val (ty, env1) = elab.elabExpr(expr, env)
           if (!subtype.subType(ty, resTy)) {

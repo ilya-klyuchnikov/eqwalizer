@@ -29,8 +29,14 @@ class Patch(erroneousExpr: Expr) {
       e match {
         case Block(body) =>
           Block(patchBody(body))(e.pos)
+        case Maybe(exprs) =>
+          Maybe(exprs.map(patchExpr))(e.pos)
+        case MaybeElse(exprs, clauses) =>
+          MaybeElse(exprs.map(patchExpr), clauses.map(patchClause))(e.pos)
         case Match(pat, expr) =>
           Match(pat, patchExpr(expr))(e.pos)
+        case MaybeMatch(pat, expr) =>
+          MaybeMatch(pat, patchExpr(expr))(e.pos)
         case Tuple(elems) =>
           Tuple(elems.map(patchExpr))(e.pos)
         case Cons(h, t) =>

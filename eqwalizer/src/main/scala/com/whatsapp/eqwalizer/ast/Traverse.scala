@@ -79,7 +79,21 @@ class Traverse(val listener: AstListener) {
       listener.enterExpr(b)
       body.exprs.foreach(traverseExpr)
       listener.exitExpr(b)
+    case m @ Maybe(exprs) =>
+      listener.enterExpr(m)
+      exprs.foreach(traverseExpr)
+      listener.exitExpr(m)
+    case me @ MaybeElse(exprs, clauses) =>
+      listener.enterExpr(me)
+      exprs.foreach(traverseExpr)
+      clauses.foreach(traverseClause)
+      listener.exitExpr(me)
     case m @ Match(pat, expr) =>
+      listener.enterExpr(m)
+      traversePat(pat)
+      traverseExpr(expr)
+      listener.exitExpr(m)
+    case m @ MaybeMatch(pat, expr) =>
       listener.enterExpr(m)
       traversePat(pat)
       traverseExpr(expr)

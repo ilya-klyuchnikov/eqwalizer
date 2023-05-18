@@ -358,6 +358,8 @@ class ConvertAst(fromBeam: Boolean, noAutoImport: Set[Id] = Set.empty) {
     term match {
       case ETuple(List(EAtom("match"), EPos(p), ePat1, eExp)) =>
         Match(convertPat(ePat1), convertExp(eExp))(p)
+      case ETuple(List(EAtom("maybe_match"), EPos(p), ePat1, eExp)) =>
+        MaybeMatch(convertPat(ePat1), convertExp(eExp))(p)
       case ETuple(List(EAtom("var"), EPos(p), EAtom(name))) =>
         Var(name)(p)
       case ETuple(List(EAtom("tuple"), EPos(p), EList(eExps, None))) =>
@@ -423,6 +425,12 @@ class ConvertAst(fromBeam: Boolean, noAutoImport: Set[Id] = Set.empty) {
         MComprehension(kTemplate, vTemplate, eQualifiers.map(convertQualifier))(p)
       case ETuple(List(EAtom("block"), EPos(p), EList(eExps, None))) =>
         Block(Body(eExps.map(convertExp)))(p)
+      case ETuple(List(EAtom("maybe"), EPos(p), EList(eExps, None))) =>
+        Maybe(eExps.map(convertExp))(p)
+      case ETuple(
+            List(EAtom("maybe"), EPos(p), EList(eExps, None), ETuple(List(EAtom("else"), _, EList(eClauses, None))))
+          ) =>
+        MaybeElse(eExps.map(convertExp), eClauses.map(convertClause))(p)
       case ETuple(List(EAtom("if"), EPos(p), EList(eClauses, None))) =>
         If(eClauses.map(convertClause))(p)
       case ETuple(List(EAtom("case"), EPos(p), eExp, EList(eClauses, None))) =>

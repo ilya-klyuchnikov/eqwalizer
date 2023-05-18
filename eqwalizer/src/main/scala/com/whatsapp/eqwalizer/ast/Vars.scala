@@ -66,7 +66,13 @@ object Vars {
       Set.empty
     case Block(body) =>
       bodyVars(body)
+    case Maybe(_) =>
+      Set.empty
+    case MaybeElse(_, _) =>
+      Set.empty
     case Match(pat, expr) =>
+      patVars(pat) ++ exprVars(expr)
+    case MaybeMatch(pat, expr) =>
       patVars(pat) ++ exprVars(expr)
     case Tuple(elems) =>
       elems.flatMap(exprVars).toSet

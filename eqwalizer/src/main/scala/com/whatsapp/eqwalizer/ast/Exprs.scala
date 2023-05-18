@@ -21,7 +21,11 @@ object Exprs {
   case class FloatLit()(val pos: Pos) extends Expr
 
   case class Block(body: Body)(val pos: Pos) extends Expr
+  case class Maybe(exprs: List[Expr])(val pos: Pos) extends Expr
+  case class MaybeElse(exprs: List[Expr], elseClauses: List[Clause])(val pos: Pos) extends Expr
+
   case class Match(pat: Pat, expr: Expr)(val pos: Pos) extends Expr
+  case class MaybeMatch(pat: Pat, expr: Expr)(val pos: Pos) extends Expr
 
   case class Tuple(elems: List[Expr])(val pos: Pos) extends Expr
 

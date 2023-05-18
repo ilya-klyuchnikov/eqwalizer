@@ -159,6 +159,10 @@ object Show {
       "string_lit"
     case Block(_) =>
       "block_expr"
+    case Maybe(_) =>
+      "maybe"
+    case MaybeElse(_, _) =>
+      "maybe_else"
     case LocalCall(Id(f, _), args) =>
       s"""$f(${args.map(show).mkString(", ")})"""
     case Exprs.RemoteCall(RemoteId(m, t, _), args) =>
@@ -190,6 +194,8 @@ object Show {
       "[]"
     case Match(_, _) =>
       "match_expr"
+    case MaybeMatch(_, _) =>
+      "maybe_match_expr"
     case Case(_, _) =>
       "case ..."
     case If(_) =>

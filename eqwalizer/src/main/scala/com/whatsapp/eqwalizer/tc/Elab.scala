@@ -226,6 +226,10 @@ final class Elab(pipelineContext: PipelineContext) {
         }
       case Block(block) =>
         elabBody(block, env)
+      case Maybe(_) =>
+        ???
+      case MaybeElse(_, _) =>
+        ???
       case c: Case if Predicates.isCaseIf(c) =>
         val ifExpr = Predicates.asIf(c)
         elabExpr(ifExpr, env)
@@ -273,6 +277,9 @@ final class Elab(pipelineContext: PipelineContext) {
         val (ty, env1) = elabExpr(mExp, env)
         val (patTy, patEnv) = elabPat.elabPat(mPat, ty, env1)
         (patTy, patEnv)
+      case MaybeMatch(_, _) =>
+        // MaybeMatch can happen only inside Maybe and needs special treatment
+        throw new IllegalStateException(s"unexpected $expr")
       case UnOp(op, arg) =>
         op match {
           case "not" =>
