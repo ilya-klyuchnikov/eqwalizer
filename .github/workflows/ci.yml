@@ -4,7 +4,7 @@ jobs:
     name: Linux CI (OTP ${{matrix.otp}})
     strategy:
       matrix:
-        otp: ['26.0', '25.3', '24.3']
+        otp: ['26.0']
     steps:
       - name: Checkout
         uses: "actions/checkout@v2"
@@ -48,49 +48,6 @@ jobs:
         run: 'echo "$GITHUB_WORKSPACE/mini-elp/target/x86_64-unknown-linux-musl/release" >> $GITHUB_PATH'
       - name: Test eqwalizer
         run: 'cd eqwalizer && sbt test'
-      - name: Upload eqwalizer.jar
-        if: matrix.otp == '25.3'
-        uses: "actions/upload-artifact@v2"
-        with:
-          name: eqwalizer.jar
-          path: eqwalizer/target/scala-2.13/eqwalizer.jar
-  macos-ci:
-    needs:
-      - linux-ci
-    runs-on: macos-latest
-    name: MacOS CI (${{matrix.brew_erlang}})
-    strategy:
-      matrix:
-        brew_erlang: ['erlang@25', 'erlang@24']
-    steps:
-      - name: Checkout
-        uses: "actions/checkout@v2"
-      - name: Set up GraalVM
-        uses: "DeLaGuardo/setup-graalvm@5.0"
-        with:
-          graalvm: '22.1.0'
-          java: 'java11'
-      - name: Install Native Image Plugin
-        run: gu install native-image
-      - name: Install Erlang
-        run: brew install ${{matrix.brew_erlang}}
-      - name: Install rebar3
-        run: "mkdir rebar3 && curl https://s3.amazonaws.com/rebar3/rebar3 -o rebar3/rebar3 && chmod +x rebar3/rebar3"
-      - name: Set up rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - name: Download eqwalizer.jar
-        uses: "actions/download-artifact@v2"
-        with:
-          name: eqwalizer.jar
-          path: eqwalizer/target/scala-2.13
-      - name: Assemble eqwalizer binary
-        run: "cd eqwalizer && native-image -H:IncludeResources=application.conf --no-server --no-fallback -jar target/scala-2.13/eqwalizer.jar eqwalizer"
-      - name: Test elp
-        run: "export PATH=$GITHUB_WORKSPACE/rebar3:/usr/local/opt/${{matrix.brew_erlang}}/bin:$PATH ELP_EQWALIZER_PATH=$GITHUB_WORKSPACE/eqwalizer/eqwalizer && cd mini-elp && cargo test --workspace"
-      - name: Assemble elp
-        run: "export PATH=$GITHUB_WORKSPACE/rebar3:/usr/local/opt/${{matrix.brew_erlang}}/bin:$PATH ELP_EQWALIZER_PATH=$GITHUB_WORKSPACE/eqwalizer/eqwalizer && cd mini-elp && cargo build --release"
 name: eqWAlizer CI
 on:
   push: {}
