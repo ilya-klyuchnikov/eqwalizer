@@ -20,3 +20,18 @@ maybe2(A, B, C) ->
   else
     _ -> C
   end.
+
+comp1(M) ->
+  #{Key => Value || Key := Value <- M}.
+
+comp2(M) ->
+  [{Key, Value} || Key := Value <- M].
+
+comp3(M) ->
+  << <<Key/binary, Value/binary>> || Key := Value <- M >>.
+
+comp4(List) ->
+  #{Key => Value || {Key, Value} <- List}.
+
+comp5(Bin) ->
+  #{X => true || <<X>> <= Bin}.
