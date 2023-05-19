@@ -6,3 +6,17 @@
 -module(otp26).
 -feature(maybe_expr, enable).
 -compile([export_all, nowarn_export_all]).
+
+% simple maybe
+maybe1(A) ->
+  maybe
+    A
+  end.
+
+% maybe else
+maybe2(A, B, C) ->
+  maybe
+    A ?= B
+  else
+    _ -> C
+  end.
