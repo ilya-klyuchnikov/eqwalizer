@@ -4,7 +4,7 @@ jobs:
     name: Linux CI (OTP ${{matrix.otp}})
     strategy:
       matrix:
-        otp: ['26.2']
+        otp: ['26.2', '27.0']
     steps:
       - name: Checkout eqWAlizer
         uses: "actions/checkout@v3"
