@@ -6,13 +6,11 @@
 
 name := "eqwalizer"
 
-scalaVersion := "2.13.16"
+scalaVersion := "3.6.4"
 
 scalacOptions += "-deprecation"
 scalacOptions += "-Wunused:imports"
 scalacOptions += "-Werror"
-
-javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
