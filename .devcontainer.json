@@ -1,0 +1,17 @@
+{
+    "name": "Scala Development Environment",
+    "image": "sbtscala/scala-sbt:graalvm-community-21.0.2_1.10.11_3.6.4",
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "scalameta.metals"
+        ],
+        "settings": {
+          "terminal.integrated.defaultProfile.linux": "bash"
+        }
+      }
+    },
+    "forwardPorts": [],
+    "postCreateCommand": "sbt --version"
+  }
+  
