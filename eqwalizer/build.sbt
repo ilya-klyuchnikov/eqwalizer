@@ -6,7 +6,7 @@
 
 name := "eqwalizer"
 
-scalaVersion := "2.13.8"
+scalaVersion := "2.13.16"
 
 scalacOptions += "-deprecation"
 scalacOptions += "-Wunused:imports"
