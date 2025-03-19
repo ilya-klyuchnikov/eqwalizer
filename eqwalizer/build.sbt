@@ -29,8 +29,8 @@ libraryDependencies += "com.typesafe" % "config" % "1.4.1"
 libraryDependencies += "com.lihaoyi" %% "ujson" % "1.4.4"
 
 libraryDependencies ++= Seq(
-  "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core"   % "2.22.1",
-  "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.22.1" % "compile-internal"
+  "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core"   % "2.33.3",
+  "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.33.3" % "compile-internal"
 )
 
 assembly / assemblyJarName := "eqwalizer.jar"
