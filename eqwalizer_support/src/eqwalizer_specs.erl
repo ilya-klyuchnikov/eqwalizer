@@ -46,15 +46,6 @@
 -spec 'code:priv_dir'(atom()) -> file:filename().
 'code:priv_dir'(_) -> error(eqwalizer_specs).
 
-%% -------- compile --------
-
--spec 'compile:forms'(compile:forms()) ->
-    {ok, module(), binary()}
-    | {ok, module(), binary(), eqwalizer:dynamic()}
-    | error
-    | {error, eqwalizer:dynamic(), eqwalizer:dynamic()}.
-'compile:forms'(_) -> error(eqwalizer_specs).
-
 %% -------- crypto --------
 
 -type crypto_cipher_aead() ::
