@@ -404,6 +404,42 @@ class Constraints(pipelineContext: PipelineContext) {
     }
   }
 
+  /** Instantiate a polymorphic FunType by solving its forall variables against
+    * the given (lower, upper) constraint pairs. Returns a monomorphic FunType
+    * with forall vars replaced by their solutions, or None if constraints are
+    * inconsistent.
+    */
+  def instantiatePoly(
+      ft: FunType,
+      pairs: List[(Type, Type)],
+  ): Option[FunType] = {
+    val polyVars = ft.forall.toSet
+    if (polyVars.isEmpty) return Some(ft)
+    val variances = polyVars.map(_ -> Variance.Covariant).toMap
+    diagnosticsInfo.withSuppressed {
+      try {
+        val state0 = State(
+          toSolve = polyVars,
+          varsToElim = Set.empty,
+          cs = Vector.empty,
+          variances = variances,
+          seen = Set.empty,
+          constraintLoc = SatisfiabilityCheckLoc,
+        )
+        val finalState = pairs.foldLeft(state0) { case (st, (lower, upper)) =>
+          constrain(st, lower, upper, tolerateUnion = false)
+        }
+        val meets = meetAllConstraints(finalState.cs, variances, Map.empty)
+        val subst = constraintsToSubst(meets, variances, polyVars)
+        val result = FunType(Nil, ft.argTys.map(Subst.subst(subst, _)), Subst.subst(subst, ft.resTy))
+        Some(result)
+      } catch {
+        case _: SubtypeFailure => None
+        case _: UnionFailure   => None
+      }
+    }
+  }
+
   /** Safe approximation because we re-check arg types once we have concrete param types
     */
   private def meet(t1: Type, t2: Type): Type = narrow.meet(t1, t2)

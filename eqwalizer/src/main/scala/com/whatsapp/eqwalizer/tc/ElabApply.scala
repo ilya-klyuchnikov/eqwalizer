@@ -7,7 +7,6 @@
 package com.whatsapp.eqwalizer.tc
 
 import com.whatsapp.eqwalizer.ast.Exprs.*
-import com.whatsapp.eqwalizer.ast.Pats.PatVar
 import com.whatsapp.eqwalizer.ast.Types.*
 import com.whatsapp.eqwalizer.tc.TcDiagnostics.{AmbiguousLambda, ExpectedSubtype}
 import com.whatsapp.eqwalizer.tc.generics.Constraints
@@ -17,7 +16,7 @@ import scala.collection.mutable.ListBuffer
 
 /** Implement Pierce and Turner "Local Type Inference" with the following tweaks:
   * - special handling for functions applied to lambdas, see `synthesizeWithLambdas`
-  * - instantiation of generic functions through eta-expansion - see `etaExpand`
+  * - instantiation of polymorphic function args via constraint solving - see `PolyFunArg` and `instantiatePoly`
   * - no special handling for generic function application in check mode: we didn't see much difference in behavior
   * and it's easier to maintain fewer code paths. P&T say the special casing helps for when there are type vars in
   * return types that appear in both positive and negative positions.
@@ -39,26 +38,8 @@ class ElabApply(pipelineContext: PipelineContext) {
 
   private sealed trait AppliedArg extends Constraints.ConstraintLoc
   private case class LambdaArg(arg: Lambda, argTy: Type, paramTy: FunType) extends AppliedArg
+  private case class PolyFunArg(arg: Expr, argTy: FunType, paramTy: Type) extends AppliedArg
   private case class Arg(arg: Expr, argTy: Type, paramTy: Type) extends AppliedArg
-
-  private def etaExpand(fun: LocalFun): Lambda = {
-    val pos = fun.pos
-    val varNames = (1 to fun.id.arity).map(n => s"Arg $n of '${fun.id}'").toList
-    val vars = varNames.map(Var(_)(pos))
-    val patVars = varNames.map(PatVar(_)(pos))
-    val app = LocalCall(fun.id, vars)(pos)
-    val clause = Clause(patVars, Nil, Body(List(app)))(pos)
-    Lambda(List(clause))(pos, name = None)
-  }
-  private def etaExpand(fun: RemoteFun): Lambda = {
-    val pos = fun.pos
-    val varNames = (1 to fun.id.arity).map(n => s"Arg $n of '${fun.id}'").toList
-    val patVars = varNames.map(PatVar(_)(pos))
-    val vars = varNames.map(Var(_)(pos))
-    val app = RemoteCall(fun.id, vars)(pos)
-    val clause = Clause(patVars, Nil, Body(List(app)))(pos)
-    Lambda(List(clause))(pos, name = None)
-  }
 
   // detailled docs in ./generics/README.md
   def elabApply(ft: FunType, args: List[Expr], argTys: List[Type], env: Env): Type = {
@@ -94,13 +75,14 @@ class ElabApply(pipelineContext: PipelineContext) {
         case ((lambda: Lambda, argTy: FunType), paramTy) if argTy.argTys.nonEmpty =>
           lambdaArg(lambda, argTy, paramTy)
         case ((fun: LocalFun, argTy: FunType), paramTy) if argTy.forall.nonEmpty =>
-          lambdaArg(etaExpand(fun), argTy, paramTy)
+          PolyFunArg(fun, argTy, paramTy)
         case ((fun: RemoteFun, argTy: FunType), paramTy) if argTy.forall.nonEmpty =>
-          lambdaArg(etaExpand(fun), argTy, paramTy)
+          PolyFunArg(fun, argTy, paramTy)
         case ((expr, argTy), paramTy) => Arg(expr, argTy, paramTy)
       }
 
     val lambdaArgs = appliedArgs.collect { case la: LambdaArg => la }
+    val polyFunArgs = appliedArgs.collect { case pa: PolyFunArg => pa }
     val nonLambdaArgs = appliedArgs.collect { case pa: Arg => pa }
 
     val variances = variance.toVariances(ft)
@@ -142,6 +124,34 @@ class ElabApply(pipelineContext: PipelineContext) {
     val m1 = constraints.meetAllConstraints(cs1, variances, m0)
     val subst1 = constraints.constraintsToSubst(m1, variances, toSolve)
 
+    // Instantiate polymorphic function args using the partial substitution
+    val cs2 = polyFunArgs.foldLeft(cs1) { case (cs, polyArg) =>
+      val resolvedParamTy = Subst.subst(subst1, polyArg.paramTy)
+      val pairs = polyArg.argTy.argTys.zip(
+        narrow
+          .onlyFunTypes(resolvedParamTy, polyArg.argTy.argTys.size)
+          .headOption
+          .map(_.argTys)
+          .getOrElse(List.fill(polyArg.argTy.argTys.size)(DynamicType))
+      ).map { case (polyParam, expectedParam) => (expectedParam, polyParam) }
+      constraints.instantiatePoly(polyArg.argTy, pairs) match {
+        case Some(monoFt) =>
+          constraints.constraintGen(
+            toSolve,
+            cs = cs,
+            variances = variances,
+            lowerBound = monoFt,
+            upperBound = resolvedParamTy,
+            constraintLoc = Arg(polyArg.arg, monoFt, polyArg.paramTy),
+            tolerateUnion = false,
+          )
+        case None => cs
+      }
+    }
+
+    val m2 = constraints.meetAllConstraints(cs2, variances, m1)
+    val subst2 = constraints.constraintsToSubst(m2, variances, toSolve)
+
     // Then we check the lambdas and use the inferred return types of the lambdas for a final round of constraint generation
     def inferenceRound(cs: ConstraintSeq, subst: Map[Var, Type]): (ConstraintSeq, Map[Var, Type]) = {
       val cs1 = lambdaArgs.foldLeft(cs) { case (cs, lambdaArg) =>
@@ -160,13 +170,13 @@ class ElabApply(pipelineContext: PipelineContext) {
       (cs1, subst1)
     }
 
-    val (cs3, subst3) = typeInfo.withoutTypeCollection {
-      val (cs2, subst2) = inferenceRound(cs1, subst1)
-      val subst2Merged = subst2.map {
+    val (cs4, subst4) = typeInfo.withoutTypeCollection {
+      val (cs3, subst3) = inferenceRound(cs2, subst2)
+      val subst3Merged = subst3.map {
         case (v, UnionType(tys)) => (v, narrow.joinAndMergeMaps(tys))
         case (v, ty)             => (v, ty)
       }
-      inferenceRound(cs2, subst2Merged)
+      inferenceRound(cs3, subst3Merged)
     }
 
     // Then we check the lambdas and use the inferred return types of the lambdas for a final round of constraint generation
@@ -178,10 +188,11 @@ class ElabApply(pipelineContext: PipelineContext) {
     // that the args match the parameters.
     // - We assume that any consistent substitution of type variables is sound.
     //   For example, we use an approximation for `meet` in Constraints.scala
-    nonLambdaArgs.foreach(checkArg(_, subst3))
-    lambdaArgs.foreach(checkLambdaArg(_, subst3, env))
+    nonLambdaArgs.foreach(checkArg(_, subst4))
+    polyFunArgs.foreach(checkPolyFunArg(_, subst4))
+    lambdaArgs.foreach(checkLambdaArg(_, subst4, env))
 
-    Subst.subst(subst3, ft.resTy)
+    Subst.subst(subst4, ft.resTy)
   }
 
   private def checkArg(arg: Arg, varToType: Map[Var, Type]): Unit = {
@@ -189,6 +200,12 @@ class ElabApply(pipelineContext: PipelineContext) {
     val paramTy = Subst.subst(varToType, rawParamTy)
     if (!subtype.subType(argTy, paramTy))
       diagnosticsInfo.add(ExpectedSubtype(expr.pos, expr, expected = paramTy, got = argTy))
+  }
+
+  private def checkPolyFunArg(polyArg: PolyFunArg, varToType: Map[Var, Type]): Unit = {
+    val paramTy = Subst.subst(varToType, polyArg.paramTy)
+    if (!subtype.subType(polyArg.argTy, paramTy))
+      diagnosticsInfo.add(ExpectedSubtype(polyArg.arg.pos, polyArg.arg, expected = paramTy, got = polyArg.argTy))
   }
 
   private def checkLambdaArg(lambdaArg: LambdaArg, varToType: Map[Var, Type], env: Env): Unit = {
