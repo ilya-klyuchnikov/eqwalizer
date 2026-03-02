@@ -5,6 +5,7 @@
  */
 
 package com.whatsapp.eqwalizer.tc.generics
+import com.whatsapp.eqwalizer.ast.{Exprs, LineAndColumn}
 import com.whatsapp.eqwalizer.ast.Exprs.Expr
 import com.whatsapp.eqwalizer.ast.TypeVars
 import com.whatsapp.eqwalizer.ast.Types.Key.asType
@@ -22,6 +23,13 @@ object Constraints {
     val arg: Expr
     val argTy: Type
     val paramTy: Type
+  }
+
+  /** Dummy ConstraintLoc for satisfiability checks where no real expression context exists. */
+  object SatisfiabilityCheckLoc extends ConstraintLoc {
+    val arg: Expr = Exprs.AtomLit("__satisfiable__")(LineAndColumn(0, 0))
+    val argTy: Type = NoneType
+    val paramTy: Type = NoneType
   }
 
   case class Constraint(lower: Type, upper: Type)
@@ -147,6 +155,15 @@ class Constraints(pipelineContext: PipelineContext) {
               assert(ft1.forall == ft2.forall)
               val st = state.copy(varsToElim = varsToElim ++ ft1.forall)
               val lowersAndUppers = ft2.argTys.zip(ft1.argTys) ++ List((ft1.resTy, ft2.resTy))
+              constrainSeq(st, lowersAndUppers, tolerateUnion)
+            case None if rawFt1.forall.nonEmpty =>
+              // Type Containment: freshen forall vars, add to varsToElim, and
+              // recursively constrain. CG-Upper/CG-Lower will use ElimTypeVars
+              // to promote/demote the forall vars, generating constraints on
+              // outer toSolve variables.
+              val freshFt1 = TypeVars.freshenForContainment(rawFt1, rawFt2)
+              val st = state.copy(varsToElim = varsToElim ++ freshFt1.forall)
+              val lowersAndUppers = rawFt2.argTys.zip(freshFt1.argTys) ++ List((freshFt1.resTy, rawFt2.resTy))
               constrainSeq(st, lowersAndUppers, tolerateUnion)
             case None =>
               failSubtype()
@@ -353,6 +370,38 @@ class Constraints(pipelineContext: PipelineContext) {
     case VarType(n) if !bound.contains(n) => List(n)
     case VarType(_)                       => Nil
     case _                                => TypeVars.children(ty).flatMap(freeVarsHelper(_, bound))
+  }
+
+  /** Check whether there exists an instantiation of `toSolve` variables that makes all
+    * (lower, upper) pairs in `pairs` satisfy lower <: upper.
+    * Used for type containment: forall T. body <: target if exists T s.t. body <: target.
+    */
+  def satisfiable(
+      toSolve: Set[Var],
+      varsToElim: Set[Var],
+      pairs: List[(Type, Type)],
+      variances: Map[Var, Variance],
+  ): Boolean = {
+    diagnosticsInfo.withSuppressed {
+      try {
+        val state0 = State(
+          toSolve = toSolve,
+          varsToElim = varsToElim,
+          cs = Vector.empty,
+          variances = variances,
+          seen = Set.empty,
+          constraintLoc = SatisfiabilityCheckLoc,
+        )
+        val finalState = pairs.foldLeft(state0) { case (st, (lower, upper)) =>
+          constrain(st, lower, upper, tolerateUnion = false)
+        }
+        val meets = meetAllConstraints(finalState.cs, variances, Map.empty)
+        meets.values.forall(c => subtype.subType(c.lower, c.upper))
+      } catch {
+        case _: SubtypeFailure => false
+        case _: UnionFailure   => false
+      }
+    }
   }
 
   /** Safe approximation because we re-check arg types once we have concrete param types

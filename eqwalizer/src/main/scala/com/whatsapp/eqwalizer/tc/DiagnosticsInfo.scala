@@ -12,9 +12,17 @@ import scala.collection.mutable
 
 class DiagnosticsInfo {
   private val moduleDiagnosticsInfo: mutable.ListBuffer[Diagnostic] = mutable.ListBuffer.empty
+  private var suppressCount: Int = 0
 
   def add(diag: Diagnostic): Unit = {
-    moduleDiagnosticsInfo.addOne(diag)
+    if (suppressCount == 0)
+      moduleDiagnosticsInfo.addOne(diag)
+  }
+
+  def withSuppressed[T](block: => T): T = {
+    suppressCount += 1
+    try block
+    finally suppressCount -= 1
   }
 
   def popErrors(): List[Diagnostic] = {

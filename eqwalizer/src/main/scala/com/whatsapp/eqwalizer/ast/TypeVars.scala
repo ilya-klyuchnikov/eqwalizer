@@ -42,6 +42,15 @@ object TypeVars {
     case _                            => Nil
   }
 
+  /** Freshen a FunType's forall variables to IDs above all variables in both the FunType and a target type,
+    * preventing variable capture. Used for type containment checks.
+    */
+  def freshenForContainment(ft: FunType, otherTy: Type): FunType = {
+    val forallStart = 1 + maxVarInt(ft, 0).max(maxVarInt(otherTy, 0))
+    val (freshFt, _) = freshenFrom(ft, forallStart)
+    freshFt
+  }
+
   /** For subtyping comparison, make ft1 and ft2 such that their `forall`s quantify over variables with the same
     * numbers, in the same order. This is required by algorithms in Pierce and Turner "Local Type Inference",
     * but they don't say how to do it.

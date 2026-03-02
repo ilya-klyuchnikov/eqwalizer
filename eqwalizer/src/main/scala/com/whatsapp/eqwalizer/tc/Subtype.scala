@@ -172,11 +172,21 @@ class Subtype(pipelineContext: PipelineContext) {
         subTypePol(et1, et2, seen)
       case (ft1: FunType, ft2: FunType) if ft1.argTys.size == ft2.argTys.size =>
         TypeVars.conformForalls(ft1, ft2) match {
-          case None => false
           case Some((FunType(_, args1, res1), FunType(_, args2, res2))) =>
             subTypePol(res1, res2, seen) && args2
               .lazyZip(args1)
               .forall(subTypePol(_, _, seen)(negate(polarity)))
+          case None if ft1.forall.nonEmpty =>
+            // Type Containment (Pierce & Turner): forall T. body <: target
+            // if there exists an instantiation of T that makes body <: target.
+            val freshFt1 = TypeVars.freshenForContainment(ft1, ft2)
+            pipelineContext.constraints.satisfiable(
+              toSolve = freshFt1.forall.toSet,
+              varsToElim = Set.empty,
+              pairs = ft2.argTys.zip(freshFt1.argTys) :+ (freshFt1.resTy, ft2.resTy),
+              variances = freshFt1.forall.map(_ -> generics.Variance.Covariant).toMap,
+            )
+          case None => false
         }
       case (MapType(props1, kT1, vT1), MapType(props2, kT2, vT2)) =>
         boundary {
