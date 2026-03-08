@@ -33,12 +33,34 @@ final class Check(pipelineContext: PipelineContext) {
   def openFunType(ft: FunType): (FunType, List[String]) = {
     if (ft.forall.isEmpty) return (ft, Nil)
     val n = ft.forall.size
-    val names = (0 until n).map(i => s"$$T${freeVarCounter + i}").toList
+    val boundNames = collectBoundVarNames(ft)
+    val names = (0 until n).map { i =>
+      val base = boundNames.getOrElse(i, s"T$i")
+      s"$base$$${freeVarCounter + i}"
+    }.toList
     freeVarCounter += n
     val images: List[Type] = names.reverse.map(FreeVar(_))
     val newArgTys = ft.argTys.map(TypeVars.instantiateType(_, images))
     val newResTy = TypeVars.instantiateType(ft.resTy, images)
     (FunType(Nil, newArgTys, newResTy), names)
+  }
+  private def collectBoundVarNames(ft: FunType): Map[Int, String] = {
+    val n = ft.forall.size
+    val result = scala.collection.mutable.Map[Int, String]()
+    def visitor(target: Either[Int, String], lvl: Int, default: Type): Type = {
+      target match {
+        case Left(idx) if idx >= lvl && idx - lvl < n =>
+          default match {
+            case bv: BoundVar => result.getOrElseUpdate(idx - lvl, bv.name)
+            case _            =>
+          }
+        case _ =>
+      }
+      default
+    }
+    ft.argTys.foreach(TypeVars.typeVarTransform(_, visitor, 0))
+    TypeVars.typeVarTransform(ft.resTy, visitor, 0)
+    result.toMap
   }
   private implicit val pipelineCtx: PipelineContext = pipelineContext
 

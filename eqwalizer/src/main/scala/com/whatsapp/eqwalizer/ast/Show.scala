@@ -36,7 +36,7 @@ case class Show(pipelineContext: Option[PipelineContext]) {
       case bv: BoundVar =>
         bv.name
       case fv: FreeVar =>
-        fv.name
+        showFreeVarName(fv.name)
       case AnyType =>
         "term()"
       case AtomType =>
@@ -140,7 +140,7 @@ case class Show(pipelineContext: Option[PipelineContext]) {
       case bv: BoundVar =>
         bv.name
       case fv: FreeVar =>
-        fv.name
+        showFreeVarName(fv.name)
       case AnyType =>
         "term()"
       case AtomType =>
@@ -174,6 +174,11 @@ case class Show(pipelineContext: Option[PipelineContext]) {
       case BoundedDynamicType(_) =>
         "dynamic(...)"
     }
+
+  private def showFreeVarName(name: String): String = {
+    val idx = name.lastIndexOf('$')
+    if (idx > 0) name.substring(0, idx) else name
+  }
 
   private def showRid(rid: RemoteId, forceShowModule: Boolean = false): String = {
     pipelineContext match {
