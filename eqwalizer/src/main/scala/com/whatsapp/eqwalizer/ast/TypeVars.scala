@@ -67,13 +67,7 @@ object TypeVars {
     */
   def conformForalls(ft1: FunType, ft2: FunType): Option[(FunType, FunType)] =
     if (ft1.forall.size != ft2.forall.size || ft1.argTys.size != ft2.argTys.size) None
-    else {
-      val forallStart = 1 + maxVarInt(ft1, 0).max(maxVarInt(ft2, 0))
-      val (newFt1, _) = freshenFrom(ft1, forallStart)
-      val (newFt2, _) = freshenFrom(ft2, forallStart)
-      assert(newFt1.forall.minOption == newFt2.forall.minOption)
-      Some(newFt1, newFt2)
-    }
+    else Some((ft1, ft2))
 
   /** Rename so that the bound variables of `ft` start from `forallStart`.
     */

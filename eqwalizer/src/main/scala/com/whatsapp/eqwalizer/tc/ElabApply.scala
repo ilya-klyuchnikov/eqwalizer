@@ -35,7 +35,7 @@ class ElabApply(pipelineContext: PipelineContext) {
   private lazy val diagnosticsInfo = pipelineContext.diagnosticsInfo
   implicit val pipelineCtx: PipelineContext = pipelineContext
 
-  private type Var = Int
+  private type Var = String
 
   private sealed trait AppliedArg extends Constraints.ConstraintLoc
   private case class LambdaArg(arg: Lambda, argTy: Type, paramTy: FunType) extends AppliedArg
@@ -61,12 +61,20 @@ class ElabApply(pipelineContext: PipelineContext) {
   }
 
   // detailled docs in ./generics/README.md
-  def elabApply(ft: FunType, args: List[Expr], argTys: List[Type], env: Env): Type = {
+  def elabApply(origFt: FunType, args: List[Expr], argTys: List[Type], env: Env): Type = {
+
+    // Open the function type, converting BoundVars to fresh FreeVars
+    val (ft, freeVarNames) = check.openFunType(origFt)
 
     assert(ft.argTys.size == argTys.size)
     assert(args.size == argTys.size)
 
-    val toSolve = ft.forall.toSet
+    val toSolve: Set[Var] = freeVarNames.toSet
+
+    // Compute variances on the original type (with BoundVars), then map to FreeVar names
+    val origVariances = variance.toVariances(origFt)
+    val variances: Map[Var, generics.Variance.Variance] =
+      origFt.forall.zip(freeVarNames).map { case (idx, name) => name -> origVariances(idx) }.toMap
 
     def lambdaArg(lambda: Lambda, argTy: FunType, paramTy: Type): AppliedArg = {
       val arity = lambda.clauses.headOption.map(_.pats.size).getOrElse(0)
@@ -103,7 +111,6 @@ class ElabApply(pipelineContext: PipelineContext) {
     val lambdaArgs = appliedArgs.collect { case la: LambdaArg => la }
     val nonLambdaArgs = appliedArgs.collect { case pa: Arg => pa }
 
-    val variances = variance.toVariances(ft)
     val delayed: ListBuffer[Arg] = ListBuffer.empty
     val cs0 = nonLambdaArgs.foldLeft(Vector.empty: ConstraintSeq) { case (cs, arg) =>
       try
@@ -133,7 +140,7 @@ class ElabApply(pipelineContext: PipelineContext) {
         cs = cs,
         variances = variances,
         lowerBound = arg.argTy,
-        upperBound = Subst.subst(subst0, arg.paramTy),
+        upperBound = Subst.substFree(subst0, arg.paramTy),
         constraintLoc = arg,
         tolerateUnion = false,
       )
@@ -181,20 +188,20 @@ class ElabApply(pipelineContext: PipelineContext) {
     nonLambdaArgs.foreach(checkArg(_, subst3))
     lambdaArgs.foreach(checkLambdaArg(_, subst3, env))
 
-    Subst.subst(subst3, ft.resTy)
+    Subst.substFree(subst3, ft.resTy)
   }
 
   private def checkArg(arg: Arg, varToType: Map[Var, Type]): Unit = {
     val Arg(expr, argTy, rawParamTy) = arg
-    val paramTy = Subst.subst(varToType, rawParamTy)
+    val paramTy = Subst.substFree(varToType, rawParamTy)
     if (!subtype.subType(argTy, paramTy))
       diagnosticsInfo.add(ExpectedSubtype(expr.pos, expr, expected = paramTy, got = argTy))
   }
 
   private def checkLambdaArg(lambdaArg: LambdaArg, varToType: Map[Var, Type], env: Env): Unit = {
     val LambdaArg(lambda, _, FunType(_, rawArgTys, rawExpResTy)) = lambdaArg
-    val argTys = rawArgTys.map(Subst.subst(varToType, _))
-    val expResTy = Subst.subst(varToType, rawExpResTy)
+    val argTys = rawArgTys.map(Subst.substFree(varToType, _))
+    val expResTy = Subst.substFree(varToType, rawExpResTy)
     val expFunTy = FunType(Nil, argTys, expResTy)
     val env1 =
       lambda.name match {
@@ -214,7 +221,7 @@ class ElabApply(pipelineContext: PipelineContext) {
   ): FunType = {
     val LambdaArg(lambda, _, ft: FunType) = lambdaArg
 
-    val argTys = ft.argTys.map(Subst.subst(varToType, _))
+    val argTys = ft.argTys.map(Subst.substFree(varToType, _))
     val env1 =
       lambda.name match {
         case Some(name) =>

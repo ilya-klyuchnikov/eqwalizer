@@ -29,11 +29,21 @@ final class Check(pipelineContext: PipelineContext) {
   private lazy val customReturn = pipelineContext.customReturn
   private lazy val typeInfo = pipelineContext.typeInfo
   private lazy val diagnosticsInfo = pipelineContext.diagnosticsInfo
-  lazy val freshen = new TypeVars.VarFreshener().freshen
+  private var freeVarCounter = 0
+  def openFunType(ft: FunType): (FunType, List[String]) = {
+    if (ft.forall.isEmpty) return (ft, Nil)
+    val n = ft.forall.size
+    val names = (0 until n).map(i => s"$$T${freeVarCounter + i}").toList
+    freeVarCounter += n
+    val images: List[Type] = names.reverse.map(FreeVar(_))
+    val newArgTys = ft.argTys.map(TypeVars.instantiateType(_, images))
+    val newResTy = TypeVars.instantiateType(ft.resTy, images)
+    (FunType(Nil, newArgTys, newResTy), names)
+  }
   private implicit val pipelineCtx: PipelineContext = pipelineContext
 
   def checkFun(f: FunDecl, spec: FunSpec): Unit = {
-    val ft = freshen(spec.ty)
+    val (ft, _) = openFunType(spec.ty)
     val FunType(_, argTys, resTy) = ft
     val clauseEnvs = occurrence.clausesEnvs(f.clauses, ft.argTys, Map.empty)
     val singleClause = f.clauses.length == 1
@@ -55,7 +65,7 @@ final class Check(pipelineContext: PipelineContext) {
 
   def checkOverloadedFun(f: FunDecl, overloadedSpec: OverloadedFunSpec): Unit = {
     overloadedSpec.tys.foreach { funTy =>
-      val ft = freshen(funTy)
+      val (ft, _) = openFunType(funTy)
       val FunType(_, argTys, resTy) = ft
       val clauseEnvs = occurrence.clausesEnvs(f.clauses, ft.argTys, Env.empty)
       f.clauses
@@ -206,7 +216,7 @@ final class Check(pipelineContext: PipelineContext) {
             env1
           } else {
             val ft = util.getFunType(module, id)
-            checkApply(funId, expr, freshen(ft), args, resTy, env)
+            checkApply(funId, expr, ft, args, resTy, env)
           }
         case DynRemoteFun(mod, name) =>
           throw new IllegalStateException(s"unexpected $expr")
@@ -232,7 +242,7 @@ final class Check(pipelineContext: PipelineContext) {
             env1
           } else {
             val ft = util.getFunType(fqn)
-            checkApply(fqn, expr, freshen(ft), args, resTy, env)
+            checkApply(fqn, expr, ft, args, resTy, env)
           }
         case DynCall(l: Lambda, args) =>
           val arity = lambdaArity(l)
@@ -282,15 +292,13 @@ final class Check(pipelineContext: PipelineContext) {
         case LocalFun(id) =>
           val fqn = util.globalFunId(module, id)
           val ft = util.getFunType(fqn)
-          val ft1 = freshen(ft)
-          if (!subtype.subType(ft1, resTy))
-            diagnosticsInfo.add(ExpectedSubtype(expr.pos, expr, expected = resTy, got = ft1))
+          if (!subtype.subType(ft, resTy))
+            diagnosticsInfo.add(ExpectedSubtype(expr.pos, expr, expected = resTy, got = ft))
           env
         case RemoteFun(fqn) =>
           val ft = util.getFunType(fqn)
-          val ft1 = freshen(ft)
-          if (!subtype.subType(ft1, resTy))
-            diagnosticsInfo.add(ExpectedSubtype(expr.pos, expr, expected = resTy, got = ft1))
+          if (!subtype.subType(ft, resTy))
+            diagnosticsInfo.add(ExpectedSubtype(expr.pos, expr, expected = resTy, got = ft))
           env
         case lambda: Lambda =>
           checkLambda(lambda, resTy, env)

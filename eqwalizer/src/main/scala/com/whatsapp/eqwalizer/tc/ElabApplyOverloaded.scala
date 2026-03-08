@@ -28,12 +28,12 @@ class ElabApplyOverloaded(pipelineContext: PipelineContext) {
     val (argTys, env1) = elab.elabExprs(args, env)
     selectFunTypes(depFunSpec, argTys) match {
       case List(ft: FunType) =>
-        val resTy = elabApply.elabApply(check.freshen(ft), args, argTys, env1)
+        val resTy = elabApply.elabApply(ft, args, argTys, env1)
         (resTy, env1)
       case _ =>
         if (pipelineCtx.overloadedSpecDynamicResult && typeInfo.isCollect)
           diagnosticsInfo.add(NoSpecialType(expr.pos, expr, argTys))
-        toFunType(depFunSpec).foreach(ft => elabApply.elabApply(check.freshen(ft), args, argTys, env1))
+        toFunType(depFunSpec).foreach(ft => elabApply.elabApply(ft, args, argTys, env1))
         (DynamicType, env1)
     }
   }

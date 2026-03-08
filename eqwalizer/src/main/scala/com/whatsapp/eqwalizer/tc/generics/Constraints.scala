@@ -5,7 +5,7 @@
  */
 
 package com.whatsapp.eqwalizer.tc.generics
-import com.whatsapp.eqwalizer.ast.Exprs.Expr
+import com.whatsapp.eqwalizer.ast.Exprs
 import com.whatsapp.eqwalizer.ast.TypeVars
 import com.whatsapp.eqwalizer.ast.Types.Key.asType
 import com.whatsapp.eqwalizer.ast.Types._
@@ -16,10 +16,10 @@ import com.whatsapp.eqwalizer.tc.{PipelineContext, Subst}
 import scala.annotation.tailrec
 
 object Constraints {
-  private type Var = Int
+  private type Var = String
 
   trait ConstraintLoc {
-    val arg: Expr
+    val arg: Exprs.Expr
     val argTy: Type
     val paramTy: Type
   }
@@ -34,7 +34,7 @@ object Constraints {
       toSolve: Set[Var],
       // varsToElim is set V in Pierce and Turner section 3.3: variables that should not appear in constraints (bound variables).
       // currently will *always* be empty because currently in EqWAlizer parameters with function types always have empty foralls (we don't have higher-rank types).
-      varsToElim: Set[Var],
+      varsToElim: Set[Int],
       cs: ConstraintSeq,
       variances: Map[Var, Variance],
       seen: Set[(Type, Type)], // for handling recursive types, same logic as in subtype.scala
@@ -54,7 +54,7 @@ class Constraints(pipelineContext: PipelineContext) {
   private implicit val pipelineCtx: PipelineContext = pipelineContext
 
   /** Pierce and Turner Local Type Inference section 3.3
-    * We're constraining `lowerBound` to be a subtype of `upperBound` (usually written `S &lt;: T` in the paper).
+    * We're constraining `lowerBound` to be a subtype of `upperBound` (usually written `S <: T` in the paper).
     *
     * Differences from the paper:
     * - We have more types of types in our system (tuples, for example).
@@ -109,26 +109,28 @@ class Constraints(pipelineContext: PipelineContext) {
     else
       (lowerBound, upperBound) match {
         // CG-Upper from Pierce and "Turner Local Type Inference"
-        case (BoundVar(n), _) if toSolve(n) =>
+        case (FreeVar(name), _) if toSolve(name) =>
           assert(freeVars(upperBound).intersect(toSolve).isEmpty)
-          val upper = ElimTypeVars.elimTypeVars(upperBound, ElimTypeVars.Demote, varsToElim)
+          val upper = ElimTypeVars.elimTypeVars(upperBound, ElimTypeVars.Demote, Set.empty, varsToElim)
           val constraint = Constraint(NoneType, upper)
-          state.copy(cs = constraints :+ (n, constraintLoc, constraint))
+          state.copy(cs = constraints :+ (name, constraintLoc, constraint))
         // CG-Lower
-        case (_, BoundVar(n)) if toSolve(n) =>
+        case (_, FreeVar(name)) if toSolve(name) =>
           assert(freeVars(lowerBound).intersect(toSolve).isEmpty)
-          val lower = ElimTypeVars.elimTypeVars(lowerBound, ElimTypeVars.Promote, varsToElim)
+          val lower = ElimTypeVars.elimTypeVars(lowerBound, ElimTypeVars.Promote, Set.empty, varsToElim)
           val constraint = Constraint(lower, AnyType)
-          state.copy(cs = constraints :+ (n, constraintLoc, constraint))
-        case (BoundVar(n1), BoundVar(n2)) if n1 == n2 && !toSolve(n1) =>
+          state.copy(cs = constraints :+ (name, constraintLoc, constraint))
+        case (BoundVar(n1), BoundVar(n2)) if n1 == n2 =>
+          state
+        case (FreeVar(name1), FreeVar(name2)) if name1 == name2 && !toSolve(name1) =>
           state
         case (DynamicType, _) =>
           val solveFor = freeVars(upperBound).intersect(toSolve)
-          val newConstraints = solveFor.map(n => (n, constraintLoc, Constraint(DynamicType, AnyType))).toVector
+          val newConstraints = solveFor.map(name => (name, constraintLoc, Constraint(DynamicType, AnyType))).toVector
           state.copy(cs = constraints ++ newConstraints)
         case (BoundedDynamicType(_), _) =>
           val solveFor = freeVars(upperBound).intersect(toSolve)
-          val newConstraints = solveFor.map(n => (n, constraintLoc, Constraint(DynamicType, AnyType))).toVector
+          val newConstraints = solveFor.map(name => (name, constraintLoc, Constraint(DynamicType, AnyType))).toVector
           state.copy(cs = constraints ++ newConstraints)
         case (_, BoundedDynamicType(bound)) =>
           constrain(state, lowerBound, bound, tolerateUnion)
@@ -167,14 +169,14 @@ class Constraints(pipelineContext: PipelineContext) {
           constrainSeq(state, tys.map((_, upperBound)), tolerateUnion)
         // when the upper bound is a union, see if there is only one potential match, use it for constraint generation
         case (_, UnionType(tys)) =>
-          val elimmedLower = ElimTypeVars.elimTypeVars(lowerBound, ElimTypeVars.Demote, toSolve ++ varsToElim)
+          val elimmedLower = ElimTypeVars.elimTypeVars(lowerBound, ElimTypeVars.Demote, toSolve, varsToElim)
           val candidates = tys.filter { ty =>
-            val elimmedUpper = ElimTypeVars.elimTypeVars(ty, ElimTypeVars.Promote, toSolve ++ varsToElim)
+            val elimmedUpper = ElimTypeVars.elimTypeVars(ty, ElimTypeVars.Promote, toSolve, varsToElim)
             subtype.subType(elimmedLower, elimmedUpper)
           }.toList
           val (varTypes, others) = candidates.partition {
-            case _: BoundVar => true
-            case _           => false
+            case fv: FreeVar if toSolve(fv.name) => true
+            case _                                => false
           }
           (varTypes, others) match {
             case (_, List(upperBound)) =>
@@ -242,7 +244,7 @@ class Constraints(pipelineContext: PipelineContext) {
                 constraints = (asType(key1), kT2) :: (prop1.tp, vT2) :: constraints
             }
           }
-          val elimmedkT1 = ElimTypeVars.elimTypeVars(kT1, ElimTypeVars.Promote, toSolve ++ varsToElim)
+          val elimmedkT1 = ElimTypeVars.elimTypeVars(kT1, ElimTypeVars.Promote, toSolve, varsToElim)
           for ((key2, prop2) <- props2.removedAll(props1.keySet)) {
             if (subtype.subType(asType(key2), elimmedkT1)) {
               constraints = (asType(key2), kT1) :: (vT1, prop2.tp) :: constraints
@@ -262,7 +264,7 @@ class Constraints(pipelineContext: PipelineContext) {
       variances: Map[Var, Variance],
   ): Nothing = {
     val subst = constraintsToSubst(cs, variances)
-    val expected = Subst.subst(subst, cLoc.paramTy)
+    val expected = Subst.substFree(subst, cLoc.paramTy)
     diagnosticsInfo.add(ExpectedSubtype(cLoc.arg.pos, cLoc.arg, expected, got = cLoc.argTy))
     throw SubtypeFailure()
   }
@@ -296,12 +298,12 @@ class Constraints(pipelineContext: PipelineContext) {
         val lower = subtype.join(c1.lower, c2.lower)
         if (!subtype.subType(c2.lower, c1.upper)) {
           val subst = constraintsToSubst(constraints, variances) + (tv -> c1.upper)
-          val expected = Subst.subst(subst, cLoc.paramTy)
+          val expected = Subst.substFree(subst, cLoc.paramTy)
           diagnosticsInfo.add(ExpectedSubtype(cLoc.arg.pos, cLoc.arg, expected, got = cLoc.argTy))
           constraints + (tv -> Constraint(DynamicType, DynamicType))
         } else if (!subtype.subType(lower, upper)) {
           val subst = constraintsToSubst(constraints, variances) + (tv -> c1.lower)
-          val expected = Subst.subst(subst, cLoc.paramTy)
+          val expected = Subst.substFree(subst, cLoc.paramTy)
           diagnosticsInfo.add(ExpectedSubtype(cLoc.arg.pos, cLoc.arg, expected, got = cLoc.argTy))
           constraints + (tv -> Constraint(DynamicType, DynamicType))
         } else {
@@ -344,15 +346,11 @@ class Constraints(pipelineContext: PipelineContext) {
       c.upper
   }
 
-  private def freeVars(ty: Type): Set[Var] = freeVarsHelper(ty, Set.empty).toSet
+  private def freeVars(ty: Type): Set[Var] = freeVarsHelper(ty).toSet
 
-  private def freeVarsHelper(ty: Type, bound: Set[Var]): List[Var] = ty match {
-    case ft: FunType =>
-      val bound1 = bound ++ ft.forall
-      TypeVars.children(ft).flatMap(freeVarsHelper(_, bound1))
-    case BoundVar(n) if !bound.contains(n) => List(n)
-    case BoundVar(_)                       => Nil
-    case _                                => TypeVars.children(ty).flatMap(freeVarsHelper(_, bound))
+  private def freeVarsHelper(ty: Type): List[Var] = ty match {
+    case FreeVar(name) => List(name)
+    case _             => TypeVars.children(ty).flatMap(freeVarsHelper)
   }
 
   /** Safe approximation because we re-check arg types once we have concrete param types

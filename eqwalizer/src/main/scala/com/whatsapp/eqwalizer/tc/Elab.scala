@@ -163,7 +163,7 @@ final class Elab(pipelineContext: PipelineContext) {
           val (argTys, env1) = typeInfo.withoutLambdaTypeCollection {
             elabExprs(args, env)
           }
-          var resTy = elabApply.elabApply(check.freshen(ft), args, argTys, env1)
+          var resTy = elabApply.elabApply(ft, args, argTys, env1)
           if (customReturn.isCustomReturn(funId))
             resTy = customReturn.customizeResultType(funId, args, argTys, resTy)
           (resTy, env1)
@@ -246,7 +246,7 @@ final class Elab(pipelineContext: PipelineContext) {
           val (argTys, env1) = typeInfo.withoutLambdaTypeCollection {
             elabExprs(args, env)
           }
-          var resTy = elabApply.elabApply(check.freshen(ft), args, argTys, env1)
+          var resTy = elabApply.elabApply(ft, args, argTys, env1)
           if (customReturn.isCustomReturn(fqn))
             resTy = customReturn.customizeResultType(fqn, args, argTys, resTy)
           (resTy, env1)
@@ -254,10 +254,10 @@ final class Elab(pipelineContext: PipelineContext) {
       case LocalFun(id) =>
         val fqn = util.globalFunId(module, id)
         val ft = util.getFunType(fqn)
-        (check.freshen(ft), env)
+        (ft, env)
       case RemoteFun(fqn) =>
         val ft = util.getFunType(fqn)
-        (check.freshen(ft), env)
+        (ft, env)
       case lambda @ Lambda(clauses) =>
         val arity = clauses.head.pats.length
         val funType = FunType(Nil, List.fill(arity)(DynamicType), DynamicType)

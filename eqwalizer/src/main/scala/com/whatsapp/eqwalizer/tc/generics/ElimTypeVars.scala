@@ -15,18 +15,21 @@ object ElimTypeVars {
   case object Promote extends VarElimMode
   case object Demote extends VarElimMode
 
-  private def containsVars(ty: Type, tv: Set[Int]): Boolean = ty match {
-    case BoundVar(n) => tv(n)
-    case ty          => TypeVars.children(ty).exists(containsVars(_, tv))
+  private def containsVars(ty: Type, freeVars: Set[String], boundVars: Set[Int]): Boolean = ty match {
+    case FreeVar(name) => freeVars(name)
+    case BoundVar(n)   => boundVars(n)
+    case ty            => TypeVars.children(ty).exists(containsVars(_, freeVars, boundVars))
   }
 
   /** Pierce and Turner Local Type Inference section 3.2
     */
-  def elimTypeVars(ty: Type, mode: VarElimMode, vars: Set[Int])(implicit pipelineContext: PipelineContext): Type = {
-    def elim(t: Type): Type = elimTypeVars(t, mode, vars)
+  def elimTypeVars(ty: Type, mode: VarElimMode, freeVars: Set[String], boundVars: Set[Int] = Set.empty)(implicit
+      pipelineContext: PipelineContext
+  ): Type = {
+    def elim(t: Type): Type = elimTypeVars(t, mode, freeVars, boundVars)
     ty match {
       case FunType(forall, args, resType) =>
-        val args1 = args.map(elimTypeVars(_, switchMode(mode), vars))
+        val args1 = args.map(elimTypeVars(_, switchMode(mode), freeVars, boundVars))
         FunType(forall, args1, elim(resType))
       case AnyArityFunType(resType) =>
         AnyArityFunType(elim(resType))
@@ -39,14 +42,18 @@ object ElimTypeVars {
       case RemoteType(id, params) =>
         val variances = pipelineContext.variance.paramVariances(id)
         val elimmedParams = params.lazyZip(variances).map {
-          case (param, Variance.Constant | Variance.Covariant) => elimTypeVars(param, mode, vars)
-          case (param, Variance.Contravariant)                 => elimTypeVars(param, switchMode(mode), vars)
+          case (param, Variance.Constant | Variance.Covariant) => elimTypeVars(param, mode, freeVars, boundVars)
+          case (param, Variance.Contravariant)                 => elimTypeVars(param, switchMode(mode), freeVars, boundVars)
           case (param, Variance.Invariant) =>
-            if (containsVars(param, vars)) modeToType(mode)
+            if (containsVars(param, freeVars, boundVars)) modeToType(mode)
             else param
         }
         RemoteType(id, elimmedParams)
-      case BoundVar(v) if vars.contains(v) =>
+      case FreeVar(name) if freeVars.contains(name) =>
+        modeToType(mode)
+      case fv: FreeVar =>
+        fv
+      case BoundVar(v) if boundVars.contains(v) =>
         modeToType(mode)
       case bv: BoundVar =>
         bv

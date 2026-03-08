@@ -35,4 +35,30 @@ object Subst {
         t
     }
   }
+
+  def substFree(s: Map[String, Type], t: Type): Type = {
+    def sub(ty: Type): Type = substFree(s, ty)
+    t match {
+      case FunType(forall, args, resType) =>
+        FunType(forall, args.map(sub), sub(resType))
+      case AnyArityFunType(resTy) =>
+        AnyArityFunType(sub(resTy))
+      case TupleType(params) =>
+        TupleType(params.map(sub))
+      case ListType(elemT) =>
+        ListType(sub(elemT))
+      case UnionType(params) =>
+        UnionType(params.map(sub))
+      case RemoteType(id, params) =>
+        RemoteType(id, params.map(sub))
+      case FreeVar(name) =>
+        s.getOrElse(name, t)
+      case MapType(props, kTy, vTy) =>
+        MapType(props.map { case (key, prop) => (key, Prop(prop.req, sub(prop.tp))) }, sub(kTy), sub(vTy))
+      case RefinedRecordType(recType, fields) => RefinedRecordType(recType, fields.map(f => f._1 -> sub(f._2)))
+      case BoundedDynamicType(bound)          => BoundedDynamicType(sub(bound))
+      case _ =>
+        t
+    }
+  }
 }
