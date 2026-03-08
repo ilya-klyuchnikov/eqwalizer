@@ -35,6 +35,10 @@ case class Show(pipelineContext: Option[PipelineContext]) {
         s"$prefix${argTys.map(show).mkString("(", ", ", ")")}"
       case vt: VarType =>
         vt.name
+      case bv: BoundVar =>
+        bv.name
+      case fv: FreeVar =>
+        fv.name
       case AnyType =>
         "term()"
       case AtomType =>
@@ -137,6 +141,10 @@ case class Show(pipelineContext: Option[PipelineContext]) {
           s"""${showRid(rid)}(.../${argTys.size})"""
       case vt: VarType =>
         vt.name
+      case bv: BoundVar =>
+        bv.name
+      case fv: FreeVar =>
+        fv.name
       case AnyType =>
         "term()"
       case AtomType =>

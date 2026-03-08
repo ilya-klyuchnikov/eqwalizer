@@ -45,6 +45,18 @@ object Types {
   case class RemoteType(id: RemoteId, argTys: List[Type]) extends Type
 
   case class VarType(n: Int)(val name: String) extends Type
+
+  /** De Bruijn indexed bound variable - bound by the enclosing FunType.forall.
+    * `i` is the De Bruijn index (0-based, relative to the enclosing binder).
+    * `name` is the original name, used only for display (excluded from equality).
+    */
+  case class BoundVar(i: Int)(val name: String) extends Type
+
+  /** Named free variable - introduced during type inference when instantiating
+    * a polymorphic type. Used for constraint generation and solving.
+    */
+  case class FreeVar(name: String) extends Type
+
   case class RecordType(name: String)(val module: String) extends Type
   case class RefinedRecordType(recType: RecordType, fields: Map[String, Type]) extends Type
   case class MapType(props: Map[Key, Prop], kType: Type, vType: Type) extends Type
