@@ -24,7 +24,7 @@ class Variance(pipelineContext: PipelineContext) {
   def paramVariances(remoteId: RemoteId): List[Variance.Variance] = {
     val id = Id(remoteId.name, remoteId.arity)
     val tDecl = Db.getType(remoteId.module, id).get
-    tDecl.params.map(bv => varianceOf(tDecl.body, bv.i, isPositivePosition = true))
+    tDecl.params.indices.toList.map(i => varianceOf(tDecl.body, i, isPositivePosition = true))
   }
 
   private def varianceOf(ty: Type, tv: Var, isPositivePosition: Boolean): Variance.Variance =

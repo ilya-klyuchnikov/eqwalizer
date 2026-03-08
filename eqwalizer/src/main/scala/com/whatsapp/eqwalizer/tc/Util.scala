@@ -9,7 +9,7 @@ package com.whatsapp.eqwalizer.tc
 import com.whatsapp.eqwalizer.ast.Forms._
 import com.whatsapp.eqwalizer.ast.Types._
 import com.whatsapp.eqwalizer.ast.stub.Db
-import com.whatsapp.eqwalizer.ast.{Id, RemoteId}
+import com.whatsapp.eqwalizer.ast.{Id, RemoteId, TypeVars}
 
 class Util(pipelineContext: PipelineContext) {
   private val module = pipelineContext.module
@@ -75,10 +75,7 @@ class Util(pipelineContext: PipelineContext) {
     val id = Id(remoteId.name, remoteId.arity)
     def applyType(decl: TypeDecl): Type =
       if (id.arity == 0) decl.body
-      else {
-        val subst = decl.params.zip(args).map { case (BoundVar(n), ty) => n -> ty }.toMap
-        Subst.subst(subst, decl.body)
-      }
+      else TypeVars.instantiateType(decl.body, args.reverse)
 
     Db
       .getType(remoteId.module, id)

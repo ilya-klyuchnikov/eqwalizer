@@ -33,7 +33,7 @@ object Forms {
     lazy val fMap: Map[String, RecField] = fields.map(f => f.name -> f).toMap
   }
   case class RecField(name: String, tp: Type, defaultValue: Option[Expr], refinable: Boolean)
-  case class TypeDecl(id: Id, params: List[BoundVar], body: Type)
+  case class TypeDecl(id: Id, params: List[String], body: Type)
 
   def load(module: String): List[InternalForm] = {
     val bytes = Ipc.getAstBytes(module, Ipc.ConvertedForms).get
