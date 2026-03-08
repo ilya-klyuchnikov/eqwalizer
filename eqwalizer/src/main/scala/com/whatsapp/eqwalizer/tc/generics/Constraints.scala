@@ -109,18 +109,18 @@ class Constraints(pipelineContext: PipelineContext) {
     else
       (lowerBound, upperBound) match {
         // CG-Upper from Pierce and "Turner Local Type Inference"
-        case (VarType(n), _) if toSolve(n) =>
+        case (BoundVar(n), _) if toSolve(n) =>
           assert(freeVars(upperBound).intersect(toSolve).isEmpty)
           val upper = ElimTypeVars.elimTypeVars(upperBound, ElimTypeVars.Demote, varsToElim)
           val constraint = Constraint(NoneType, upper)
           state.copy(cs = constraints :+ (n, constraintLoc, constraint))
         // CG-Lower
-        case (_, VarType(n)) if toSolve(n) =>
+        case (_, BoundVar(n)) if toSolve(n) =>
           assert(freeVars(lowerBound).intersect(toSolve).isEmpty)
           val lower = ElimTypeVars.elimTypeVars(lowerBound, ElimTypeVars.Promote, varsToElim)
           val constraint = Constraint(lower, AnyType)
           state.copy(cs = constraints :+ (n, constraintLoc, constraint))
-        case (VarType(n1), VarType(n2)) if n1 == n2 && !toSolve(n1) =>
+        case (BoundVar(n1), BoundVar(n2)) if n1 == n2 && !toSolve(n1) =>
           state
         case (DynamicType, _) =>
           val solveFor = freeVars(upperBound).intersect(toSolve)
@@ -173,8 +173,8 @@ class Constraints(pipelineContext: PipelineContext) {
             subtype.subType(elimmedLower, elimmedUpper)
           }.toList
           val (varTypes, others) = candidates.partition {
-            case _: VarType => true
-            case _          => false
+            case _: BoundVar => true
+            case _           => false
           }
           (varTypes, others) match {
             case (_, List(upperBound)) =>
@@ -350,8 +350,8 @@ class Constraints(pipelineContext: PipelineContext) {
     case ft: FunType =>
       val bound1 = bound ++ ft.forall
       TypeVars.children(ft).flatMap(freeVarsHelper(_, bound1))
-    case VarType(n) if !bound.contains(n) => List(n)
-    case VarType(_)                       => Nil
+    case BoundVar(n) if !bound.contains(n) => List(n)
+    case BoundVar(_)                       => Nil
     case _                                => TypeVars.children(ty).flatMap(freeVarsHelper(_, bound))
   }
 

@@ -33,8 +33,6 @@ case class Show(pipelineContext: Option[PipelineContext]) {
       case RemoteType(rid, argTys) =>
         val prefix = showRid(rid)
         s"$prefix${argTys.map(show).mkString("(", ", ", ")")}"
-      case vt: VarType =>
-        vt.name
       case bv: BoundVar =>
         bv.name
       case fv: FreeVar =>
@@ -139,8 +137,6 @@ case class Show(pipelineContext: Option[PipelineContext]) {
           s"""${showRid(rid)}()"""
         else
           s"""${showRid(rid)}(.../${argTys.size})"""
-      case vt: VarType =>
-        vt.name
       case bv: BoundVar =>
         bv.name
       case fv: FreeVar =>

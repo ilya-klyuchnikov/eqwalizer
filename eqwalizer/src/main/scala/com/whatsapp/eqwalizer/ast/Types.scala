@@ -44,8 +44,6 @@ object Types {
 
   case class RemoteType(id: RemoteId, argTys: List[Type]) extends Type
 
-  case class VarType(n: Int)(val name: String) extends Type
-
   /** De Bruijn indexed bound variable - bound by the enclosing FunType.forall.
     * `i` is the De Bruijn index (0-based, relative to the enclosing binder).
     * `name` is the original name, used only for display (excluded from equality).

@@ -24,7 +24,7 @@ class Variance(pipelineContext: PipelineContext) {
   def paramVariances(remoteId: RemoteId): List[Variance.Variance] = {
     val id = Id(remoteId.name, remoteId.arity)
     val tDecl = Db.getType(remoteId.module, id).get
-    tDecl.params.map(varType => varianceOf(tDecl.body, varType.n, isPositivePosition = true))
+    tDecl.params.map(bv => varianceOf(tDecl.body, bv.i, isPositivePosition = true))
   }
 
   private def varianceOf(ty: Type, tv: Var, isPositivePosition: Boolean): Variance.Variance =
@@ -33,7 +33,7 @@ class Variance(pipelineContext: PipelineContext) {
   private def getVarianceOf(ty: Type, tv: Var, isPositivePosition: Boolean)(implicit
       history: Set[(RemoteType, Boolean)]
   ): Variance.Variance = ty match {
-    case VarType(n) if tv == n =>
+    case BoundVar(n) if tv == n =>
       if (isPositivePosition) Covariant
       else Contravariant
     case FunType(forall, argTys, resTy) =>

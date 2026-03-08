@@ -16,8 +16,8 @@ object ElimTypeVars {
   case object Demote extends VarElimMode
 
   private def containsVars(ty: Type, tv: Set[Int]): Boolean = ty match {
-    case VarType(n) => tv(n)
-    case ty         => TypeVars.children(ty).exists(containsVars(_, tv))
+    case BoundVar(n) => tv(n)
+    case ty          => TypeVars.children(ty).exists(containsVars(_, tv))
   }
 
   /** Pierce and Turner Local Type Inference section 3.2
@@ -46,10 +46,10 @@ object ElimTypeVars {
             else param
         }
         RemoteType(id, elimmedParams)
-      case VarType(v) if vars.contains(v) =>
+      case BoundVar(v) if vars.contains(v) =>
         modeToType(mode)
-      case vt: VarType =>
-        vt
+      case bv: BoundVar =>
+        bv
       case MapType(props, kt, vt) =>
         MapType(props.map { case (key, Prop(req, tp)) => (key, Prop(req, elim(tp))) }, elim(kt), elim(vt))
       case BoundedDynamicType(bound) =>
